@@ -31,7 +31,7 @@ findBd = re.compile(r'<p class="">(.*?)</p>',re.S)
 def getData(baseurl):
     datalist = []
 
-    totalpage = 1
+    totalpage = 10
     pernum = 25
     for i in range(0,totalpage):
         # 爬取网页
@@ -49,6 +49,7 @@ def getData(baseurl):
             data.append(title[0])
             if len(title) > 1:
                 temp = title[1].replace("/"," ")
+                temp = "".join(temp.split("\xa0"))
                 data.append(temp)
             else:
                 data.append("")
@@ -74,11 +75,12 @@ def getData(baseurl):
             bd = re.findall(findBd, item)[0]
             bd = re.sub('<br(\s+)?/>(\s+)?',' ',bd)
             bd = re.sub('/',' ',bd)
+            bd = "".join(bd.split("\xa0"))
             data.append(bd.strip())
 
             datalist.append(data)
 
-    print(datalist)
+    #print(datalist)
     return datalist
 
 #得到指定网页URL内容
@@ -103,23 +105,89 @@ def askURL(url):
 
 
 
-#存储数据
-def saveData(savepath):
-    pass
+#保存数据（Excel）
+def saveDataExcel(datalist,savepath):
+    book = xlwt.Workbook(encoding="utf-8",style_compression=0)
+    sheet = book.add_sheet("豆瓣电影Top250",cell_overwrite_ok=True)
 
+    infoTitle = ["排名","中文名称","别名","链接","图片链接","评分","评价人数","概况","相关信息"]
+    for i in range(len(infoTitle)):
+        sheet.write(0,i,infoTitle[i])
+
+    for i in range(len(datalist)):
+        rank = i + 1
+        data = datalist[i]
+
+        sheet.write(i+1,0,str(rank))
+        for j in range(len(data)):
+            sheet.write(i+1,j+1,data[j])
+
+    book.save(savepath)
+
+#保存数据（sqlite）
+def saveDataDb(datalist,dbPath):
+    init_db(dbPath)
+    connect = sqlite3.connect(dbPath)
+    cur = connect.cursor()
+
+    sqlbegin = "insert into movie250 (name,oname,link,pic,rating,judge,inq,bd)\n"
+    for i in range(len(datalist)):
+        data = datalist[i]
+        for j in range(len(data)):
+            if j == 4 or j == 5:
+                continue
+            data[j] = '"' + data[j] + '"'
+
+        temp = "values(" + ",".join(data) + ");"
+        sql = sqlbegin + temp
+        cur.execute(sql)
+
+    connect.commit()
+    connect.close()
+
+
+#创建表
+def init_db(dbPath):
+    sql = '''
+        create table if not exists movie250
+        (
+            id integer primary key autoincrement,
+            name varchar ,
+            oname varchar ,
+            link text,
+            pic text,
+            rating numeric ,
+            judge number ,
+            inq text,
+            bd text
+        );
+    '''
+
+    connect = sqlite3.connect(dbPath)
+    cursor = connect.cursor()
+    cursor.execute("drop table movie250")
+    cursor.execute(sql)
+    connect.commit()
+    cursor.close()
+    connect.close()
 
 
 def main():
     print("程序启动")
 
     baseurl = "https://movie.douban.com/top250?start="
-    savepath = ".\\豆瓣电影Top250.xls"
 
     #1.爬取网页数据并解析
     datalist = getData(baseurl)
 
-    #2.保存数据
-    saveData(savepath)
+    #2.保存数据（Excel）
+    # path = ".\\爬虫数据存储.xls"
+    # saveDataExcel(datalist,path)
+
+    #3.保存数据（sqlite）
+    dbPath = "doubantop250.db"
+    saveDataDb(datalist,dbPath)
 
 if __name__ == '__main__':
     main()
+    print("爬取完毕")
